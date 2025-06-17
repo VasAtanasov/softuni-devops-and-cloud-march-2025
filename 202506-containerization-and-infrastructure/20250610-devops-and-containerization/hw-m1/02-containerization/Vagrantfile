@@ -14,9 +14,9 @@ Vagrant.configure('2') do |config|
     echo "192.168.99.100 docker.do1.lab docker" >> /etc/hosts
   SCRIPT
 
-  # config.vm.provision :shell, path: 'docker-setup.sh'
+  config.vm.provision :shell, path: 'docker-setup.sh'
 
-  # config.vm.provision :shell, path: 'docker-tools.sh'
+  config.vm.provision :shell, path: 'docker-tools.sh'
 
   config.vm.provider :virtualbox do |vb|
     vb.customize ['modifyvm', :id, '--memory', '2048']
