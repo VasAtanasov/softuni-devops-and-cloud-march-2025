@@ -1,0 +1,32 @@
+Vagrant.configure('2') do |config|
+
+  config.vm.define 'docker' do |docker|
+    docker.vm.box = 'shekeriev/debian-12.11'
+    docker.vm.hostname = 'docker.do1.lab'
+
+    docker.vm.synced_folder 'vagrant/', '/vagrant', type: 'virtualbox'
+
+    docker.vm.network :private_network, ip: '192.168.99.200'
+
+    docker.vm.network :forwarded_port, guest: 8080, host: 8080, auto_correct: true
+    docker.vm.network :forwarded_port, guest: 9000, host: 9000, auto_correct: true
+    docker.vm.network :forwarded_port, guest: 9443, host: 9443, auto_correct: true
+
+    docker.vm.provision :shell, path: 'docker-setup.sh'
+
+    docker.vm.provision :shell, inline: <<~EOS
+      echo "* Add hosts ..."
+      echo "192.168.99.200 docker.do1.hw docker" >> /etc/hosts
+
+      echo "* Install Additional Packages ..."
+      apt-get install -y jq tree git vim
+    EOS
+
+    docker.vm.provision :shell, path: 'docker-tools.sh'
+
+    docker.vm.provider :virtualbox do |vb|
+      vb.customize ['modifyvm', :id, '--memory', '2048']
+    end
+  end
+
+end
