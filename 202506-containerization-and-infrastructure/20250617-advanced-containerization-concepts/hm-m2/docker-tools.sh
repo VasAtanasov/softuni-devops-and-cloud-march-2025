@@ -27,7 +27,6 @@ echo "# Trivy"
 curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \sh -s -- -b /usr/local/bin latest
 
 echo "Hadolint"
-
 HADOLING_VERSION=$(curl -sL "https://api.github.com/repos/hadolint/hadolint/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
 curl -fLo hadolint "https://github.com/hadolint/hadolint/releases/download/v${HADOLING_VERSION}/hadolint-Linux-x86_64"
 chmod +x hadolint
