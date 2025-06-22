@@ -1,6 +1,9 @@
-ARG BASE_IMAGE_TAG=latest
+FROM debian:bookworm-slim
 
-FROM postgres:${BASE_IMAGE_TAG}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
 ENV PGHOST=bulgaria-db
 ENV PGPORT=5432
