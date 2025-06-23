@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 
-# Ensure the script stops on any error
 set -euo pipefail
 
 PSQL="psql -v ON_ERROR_STOP=1"
 
 echo "  Creating user and database '$POSTGRES_DB'"
 
-# Run database creation commands in a safer manner
 $PSQL --username "$POSTGRES_USER" <<-EOSQL
     DO
     \$\$
