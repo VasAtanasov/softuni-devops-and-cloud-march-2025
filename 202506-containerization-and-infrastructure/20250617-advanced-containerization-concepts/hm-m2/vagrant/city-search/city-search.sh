@@ -1,6 +1,3 @@
 #!/bin/bash
 
-docker run -it --rm \
-  --name city-search \
-  --network pg-net \
-  city-search "$1"
+docker run -it --rm --network pg-net city-search "$1"

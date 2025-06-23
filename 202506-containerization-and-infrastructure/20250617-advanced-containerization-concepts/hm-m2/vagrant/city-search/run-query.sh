@@ -2,21 +2,14 @@
 
 CITY_PATTERN="$1"
 
-echo "Waiting for PostgreSQL at $PGHOST:$PGPORT..."
-until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"; do
+until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" > /dev/null 2>&1; do
   sleep 1
 done
 
-echo "PostgreSQL is ready."
+PSQL="psql -U $PGUSER -d $PGDATABASE -t -A -q"
 
 if [ -z "$CITY_PATTERN" ]; then
-  echo "No city pattern provided. Listing all cities..."
-  psql -d "$PGDATABASE" <<-EOSQL
-SELECT * FROM cities;
-EOSQL
+  $PSQL -c "SELECT json_agg(cities) FROM cities;" | jq .
 else
-  echo "Searching for cities matching pattern: $CITY_PATTERN"
-  psql -d "$PGDATABASE" -v pattern="'%$CITY_PATTERN%'" <<-EOSQL
-SELECT * FROM cities WHERE city_name ILIKE :pattern;
-EOSQL
+  $PSQL -c "SELECT json_agg(cities) FROM cities WHERE city_name ILIKE '%$CITY_PATTERN%';" | jq .
 fi
