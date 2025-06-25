@@ -11,14 +11,17 @@ SETTINGS = {
   SUBNET: '192.168.10.0/24',
   MANAGERS: 1,
   WORKERS: 2,
+  SHARED_DIR: '/vagrant'
 }
 
-ASSETS_FOLDER = File.join(File.dirname(__FILE__), "assets")
+ASSETS = File.join(File.dirname(__FILE__), 'assets')
 TOTAL = SETTINGS[:MANAGERS] + SETTINGS[:WORKERS]
 IP_START = 201
 DEBUG = ENV['DEBUG'] == 'true'
+LEADER_INDEX = 0
 
-puts "[INFO] DEBUG MODE ENABLED" if DEBUG
+puts '[INFO] DEBUG MODE ENABLED' if DEBUG
+
 # ---------------- Helpers ----------------
 def ips(subnet, start, count)
   base = IPAddr.new(subnet).to_range.first.to_s.split('.')
@@ -36,8 +39,9 @@ hosts = host_entries('manager', SETTINGS[:MANAGERS], 0, ips_list) +
 # ---------------- Vagrant Config ----------------
 Vagrant.configure('2') do |config|
 
-  config.vm.provision :shell, path: 'docker-setup.sh'
-  config.vm.provision :file, source: "#{ASSETS_FOLDER}/logo", destination: '/tmp/logo'
+  # config.vm.provision :shell, path: 'docker-setup.sh'
+
+  config.vm.provision :file, source: "#{ASSETS}/logo", destination: '/tmp/logo'
 
   config.vm.provision :shell, inline: <<~EOS
     echo "* Add hosts ..."
@@ -59,7 +63,7 @@ Vagrant.configure('2') do |config|
   config.vm.provider :virtualbox do |vb|
     vb.customize ['modifyvm', :id, '--memory', SETTINGS[:MEMORY]]
     vb.customize ['modifyvm', :id, '--cpus', SETTINGS[:CPUS]]
-    vb.customize ["modifyvm", :id, "--groups", "/swarm"]
+    vb.customize ['modifyvm', :id, '--groups', '/swarm']
   end
 
   # ---------------- Define Manager Nodes ----------------
@@ -71,24 +75,81 @@ Vagrant.configure('2') do |config|
     config.vm.define name do |manager|
       manager.vm.box = SETTINGS[:BOX_NAME]
       manager.vm.network :private_network, ip: ip
+      manager.vm.hostname = "#{name}.local"
 
-      manager.vm.provider "virtualbox" do |vb|
+      manager.vm.provider :virtualbox do |vb|
         vb.name = name
       end
 
-      manager.vm.provision :shell do |shell|
+      manager.vm.network :forwarded_port, guest: 9443, host: 9443, auto_correct: true
+
+      manager.vm.provision 'Init docker swarm', type: :shell do |shell|
+        shell.inline = "docker swarm init --advertise-addr #{ip}"
+      end if i == LEADER_INDEX
+
+      manager.vm.provision 'Extract worker token', type: :shell do |shell|
+        puts "Saving worker token at #{SETTINGS[:SHARED_DIR]}/worker.token" if DEBUG
+        shell.inline = "docker swarm join-token -q worker > #{SETTINGS[:SHARED_DIR]}/worker.token"
+      end if i == LEADER_INDEX
+
+      manager.vm.provision 'Extract manager token', type: "shell" do |shell|
+        puts "Saving manager token at #{SETTINGS[:SHARED_DIR]}/manager.token" if DEBUG
+        shell.inline = "docker swarm join-token -q manager > #{SETTINGS[:SHARED_DIR]}/manager.token"
+      end if i == LEADER_INDEX
+
+      # Create a local docker registry so the images can be shared between the nodes in the swarm.
+      manager.vm.provision 'Create local docker registry', type: "shell" do |shell|
+        puts "Create docker registry on #{name}" if DEBUG
+        shell.inline = "docker service create --name registry --publish published=#{5000 + i},target=5000 registry:2"
+      end if i == LEADER_INDEX
+
+      manager.vm.provision 'Join manager to swarm', type: :shell do |shell|
+        puts "Joining #{name} to docker swarm" if DEBUG
+        shell.inline = <<~SCRIPT
+          docker swarm join --token $(cat #{SETTINGS[:SHARED_DIR]}/manager.token) --advertise-addr #{ip} #{ips_list[LEADER_INDEX]}:2377
+        SCRIPT
+      end unless i == LEADER_INDEX
+
+      manager.vm.provision 'Install docker tools', type: :shell do |shell|
         shell.path = 'docker-tools.sh'
         shell.env = {
           'INSTALL_LAZYDOCKER' => 'true',
           'INSTALL_DIVE' => 'true',
           'INSTALL_PORTAINER' => 'false',
-          'INSTALL_PORTAINER_SWARM' => 'true',
+          'INSTALL_PORTAINER_SWARM' => "#{i == LEADER_INDEX}",
           'INSTALL_DRY' => 'true',
           'INSTALL_TRIVY' => 'true',
           'INSTALL_HADOLINT' => 'true',
           'INSTALL_PUSHRM' => 'true',
         }
-      end if i == 1
+      end
+
+      manager.vm.provision 'Wait for swarm and deploy', type: :shell do |shell|
+        shell.env = {
+          'EXPECTED_NODES' => TOTAL.to_s
+        }
+        shell.inline = <<~SCRIPT
+          nohup bash /vagrant/deploy-stack.sh > /vagrant/wait.log 2>&1 &
+        SCRIPT
+      end if i == LEADER_INDEX
+
+      manager.trigger.before :destroy do |trigger|
+        trigger.warn = 'Cleaning up'
+        trigger.run = {
+          inline: <<~POWERSHELL,
+            if (Test-Path "manager.token") {
+              Remove-Item "manager.token" -Force
+            }
+            if (Test-Path "worker.token") {
+              Remove-Item "worker.token" -Force
+            }
+            if (Test-Path "wait.log") {
+              Remove-Item "wait.log" -Force
+            }
+          POWERSHELL
+        }
+      end if i == 0
+
     end
   end
 
@@ -101,11 +162,18 @@ Vagrant.configure('2') do |config|
 
     config.vm.define name do |node|
       node.vm.box = SETTINGS[:BOX_NAME]
-      node.vm.hostname = name
+      node.vm.hostname = "#{name}.local"
       node.vm.network :private_network, ip: ip
 
       node.vm.provider :virtualbox do |vb|
         vb.name = name
+      end
+
+      node.vm.provision 'Join worker to swarm', type: :shell do |shell|
+        puts "Joining #{name} to docker swarm" if DEBUG
+        shell.inline = <<~SCRIPT
+          docker swarm join --token $(cat #{SETTINGS[:SHARED_DIR]}/worker.token) --advertise-addr #{ip} #{ips_list[LEADER_INDEX]}:2377
+        SCRIPT
       end
 
     end

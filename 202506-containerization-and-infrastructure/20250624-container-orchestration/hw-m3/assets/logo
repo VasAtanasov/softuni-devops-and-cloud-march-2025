@@ -38,3 +38,4 @@ if command_exists docker; then
 fi
 
 echo "                                                                                                            "
+echo "                                                                                                            "

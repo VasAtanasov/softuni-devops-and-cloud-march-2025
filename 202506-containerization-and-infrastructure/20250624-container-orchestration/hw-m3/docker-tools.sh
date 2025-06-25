@@ -14,7 +14,7 @@ BIN_DIR="/usr/local/bin"
 LOCAL_BIN="/home/vagrant/.local/bin"
 
 log() {
-  echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
+  echo "$*"
 }
 
 require_cmds() {
