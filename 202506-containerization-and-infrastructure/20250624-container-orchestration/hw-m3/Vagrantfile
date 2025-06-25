@@ -1,0 +1,114 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+require 'ipaddr'
+
+# ---------------- Settings ----------------
+SETTINGS = {
+  # BOX_NAME: 'shekeriev/debian-12.11',
+  BOX_NAME: 'debian-docker',
+  MEMORY: 2048,
+  CPUS: 1,
+  SUBNET: '192.168.10.0/24',
+  MANAGERS: 1,
+  WORKERS: 2,
+}
+
+ASSETS_FOLDER = File.join(File.dirname(__FILE__), "assets")
+TOTAL = SETTINGS[:MANAGERS] + SETTINGS[:WORKERS]
+IP_START = 201
+DEBUG = ENV['DEBUG'] == 'true'
+
+puts "[INFO] DEBUG MODE ENABLED" if DEBUG
+# ---------------- Helpers ----------------
+def ips(subnet, start, count)
+  base = IPAddr.new(subnet).to_range.first.to_s.split('.')
+  (start...(start + count)).map { |i| (base[0..2] + [i]).join('.') }
+end
+
+def host_entries(role, count, offset, ips)
+  (1..count).map { |i| "#{ips[offset + i - 1]} #{role}#{i}.do1.hw #{role}#{i}" }
+end
+
+ips_list = ips(SETTINGS[:SUBNET], IP_START, TOTAL)
+hosts = host_entries('manager', SETTINGS[:MANAGERS], 0, ips_list) +
+        host_entries('worker', SETTINGS[:WORKERS], SETTINGS[:MANAGERS], ips_list)
+
+# ---------------- Vagrant Config ----------------
+Vagrant.configure('2') do |config|
+
+  config.vm.provision :shell, path: 'docker-setup.sh'
+  config.vm.provision :file, source: "#{ASSETS_FOLDER}/logo", destination: '/tmp/logo'
+
+  config.vm.provision :shell, inline: <<~EOS
+    echo "* Add hosts ..."
+    #{hosts.map { |entry| "echo '#{entry}' >> /etc/hosts" }.join("\n")}
+
+    echo "* Install Additional Packages ..."
+    echo "* Installing tools ..."
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq jq tree git vim
+
+    echo "* Disable login message..."
+    echo -n > /home/vagrant/.hushlogin
+
+    echo "* Setting greeting..."
+    GREETING_FILE=/etc/profile.d/greeting.sh
+    [ -f "$GREETING_FILE" ] || cp /tmp/logo "$GREETING_FILE"
+  EOS
+
+  config.vm.provider :virtualbox do |vb|
+    vb.customize ['modifyvm', :id, '--memory', SETTINGS[:MEMORY]]
+    vb.customize ['modifyvm', :id, '--cpus', SETTINGS[:CPUS]]
+    vb.customize ["modifyvm", :id, "--groups", "/swarm"]
+  end
+
+  # ---------------- Define Manager Nodes ----------------
+  SETTINGS[:MANAGERS].times do |i|
+    name = "manager#{i + 1}"
+    ip = ips_list[i]
+    puts "#{ip} #{name}" if DEBUG
+
+    config.vm.define name do |manager|
+      manager.vm.box = SETTINGS[:BOX_NAME]
+      manager.vm.network :private_network, ip: ip
+
+      manager.vm.provider "virtualbox" do |vb|
+        vb.name = name
+      end
+
+      manager.vm.provision :shell do |shell|
+        shell.path = 'docker-tools.sh'
+        shell.env = {
+          'INSTALL_LAZYDOCKER' => 'true',
+          'INSTALL_DIVE' => 'true',
+          'INSTALL_PORTAINER' => 'false',
+          'INSTALL_PORTAINER_SWARM' => 'true',
+          'INSTALL_DRY' => 'true',
+          'INSTALL_TRIVY' => 'true',
+          'INSTALL_HADOLINT' => 'true',
+          'INSTALL_PUSHRM' => 'true',
+        }
+      end if i == 1
+    end
+  end
+
+  # ---------------- Define Worker Nodes ----------------
+  SETTINGS[:WORKERS].times do |i|
+    index = SETTINGS[:MANAGERS] + i
+    name = "worker#{i + 1}"
+    ip = ips_list[index]
+    puts "#{ip} #{name}" if DEBUG
+
+    config.vm.define name do |node|
+      node.vm.box = SETTINGS[:BOX_NAME]
+      node.vm.hostname = name
+      node.vm.network :private_network, ip: ip
+
+      node.vm.provider :virtualbox do |vb|
+        vb.name = name
+      end
+
+    end
+  end
+
+end
