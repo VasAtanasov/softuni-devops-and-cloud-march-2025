@@ -1,0 +1,41 @@
+services:
+
+  web:
+    deploy:
+      mode: replicated
+      replicas: 5
+    image: 127.0.0.1:5000/web
+    build:
+      context: web
+      dockerfile: Dockerfile
+    ports:
+      - "8081:80"
+    volumes:
+      - "${PROJECT_ROOT}:/var/www/html:ro"
+    networks:
+      - app-network
+    depends_on:
+      - db
+
+  db:
+    deploy:
+      mode: replicated
+      replicas: 3
+    image: 127.0.0.1:5000/db
+    build:
+      context: db
+      dockerfile: Dockerfile
+    networks:
+      - app-network
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+    secrets:
+      - db_root_password
+
+secrets:
+  db_root_password:
+    external: true
+
+networks:
+  app-network:
+

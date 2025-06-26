@@ -31,7 +31,7 @@ install_lazydocker() {
   local version
   version=$(curl -sL "https://api.github.com/repos/jesseduffield/lazydocker/releases/latest" |
     grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-  curl -L -o lazydocker.tar.gz "https://github.com/jesseduffield/lazydocker/releases/download/v${version}/lazydocker_${version}_Linux_x86_64.tar.gz"
+  curl -sSLo lazydocker.tar.gz "https://github.com/jesseduffield/lazydocker/releases/download/v${version}/lazydocker_${version}_Linux_x86_64.tar.gz"
   tar xzvf lazydocker.tar.gz lazydocker
   install -Dm 755 lazydocker -t "$LOCAL_BIN"
   rm lazydocker lazydocker.tar.gz
@@ -42,7 +42,7 @@ install_dive() {
   local version
   version=$(curl -sL "https://api.github.com/repos/wagoodman/dive/releases/latest" |
     grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-  curl -fOL "https://github.com/wagoodman/dive/releases/download/v${version}/dive_${version}_linux_amd64.deb"
+  curl -sSfOL "https://github.com/wagoodman/dive/releases/download/v${version}/dive_${version}_linux_amd64.deb"
   apt-get install -y "./dive_${version}_linux_amd64.deb"
   rm "./dive_${version}_linux_amd64.deb"
 }
@@ -59,19 +59,19 @@ install_portainer() {
 
 install_portainer_swarm() {
   log "Installing Portainer Swarm"
-  curl -L https://downloads.portainer.io/ce-lts/portainer-agent-stack.yml -o portainer-agent-stack.yml
+  curl -sSL https://downloads.portainer.io/ce-lts/portainer-agent-stack.yml -o portainer-agent-stack.yml
   docker stack deploy -c portainer-agent-stack.yml portainer
 }
 
 install_dry() {
   log "Installing Dry"
-  curl -sSf https://moncho.github.io/dry/dryup.sh | sh
+  curl -sSfL https://moncho.github.io/dry/dryup.sh | sh
   chmod 755 "$BIN_DIR/dry"
 }
 
 install_trivy() {
   log "Installing Trivy"
-  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh |
+  curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh |
     sh -s -- -b "$BIN_DIR" latest
 }
 
@@ -80,7 +80,7 @@ install_hadolint() {
   local version
   version=$(curl -sL "https://api.github.com/repos/hadolint/hadolint/releases/latest" |
     grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-  curl -fLo hadolint "https://github.com/hadolint/hadolint/releases/download/v${version}/hadolint-Linux-x86_64"
+  curl -sSfLo hadolint "https://github.com/hadolint/hadolint/releases/download/v${version}/hadolint-Linux-x86_64"
   chmod +x hadolint
   mv hadolint "$BIN_DIR/"
 }
@@ -90,7 +90,7 @@ install_pushrm() {
   local version
   version=$(curl -sL "https://api.github.com/repos/christian-korneck/docker-pushrm/releases/latest" |
     grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-  curl -fLo docker-pushrm "https://github.com/christian-korneck/docker-pushrm/releases/download/v${version}/docker-pushrm_linux_amd64"
+  curl -sSfLo docker-pushrm "https://github.com/christian-korneck/docker-pushrm/releases/download/v${version}/docker-pushrm_linux_amd64"
   chmod +x docker-pushrm
   mkdir -p "/usr/local/lib/docker/cli-plugins"
   mv docker-pushrm "/usr/local/lib/docker/cli-plugins/"
