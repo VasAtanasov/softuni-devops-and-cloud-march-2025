@@ -3,8 +3,6 @@ set -euo pipefail
 
 : "${INSTALL_LAZYDOCKER:=false}"
 : "${INSTALL_DIVE:=false}"
-: "${INSTALL_PORTAINER:=false}"
-: "${INSTALL_PORTAINER_SWARM:=false}"
 : "${INSTALL_DRY:=false}"
 : "${INSTALL_TRIVY:=false}"
 : "${INSTALL_HADOLINT:=false}"
@@ -14,7 +12,7 @@ BIN_DIR="/usr/local/bin"
 LOCAL_BIN="/home/vagrant/.local/bin"
 
 log() {
-  echo "$*"
+  echo "* $*"
 }
 
 require_cmds() {
@@ -45,22 +43,6 @@ install_dive() {
   curl -sSfOL "https://github.com/wagoodman/dive/releases/download/v${version}/dive_${version}_linux_amd64.deb"
   apt-get install -y "./dive_${version}_linux_amd64.deb"
   rm "./dive_${version}_linux_amd64.deb"
-}
-
-install_portainer() {
-  log "Installing Portainer"
-  docker volume create portainer_data
-  docker run -d -p 9000:9000 -p 9443:9443 \
-    --name portainer --restart=always \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v portainer_data:/data \
-    portainer/portainer-ce:lts
-}
-
-install_portainer_swarm() {
-  log "Installing Portainer Swarm"
-  curl -sSL https://downloads.portainer.io/ce-lts/portainer-agent-stack.yml -o portainer-agent-stack.yml
-  docker stack deploy -c portainer-agent-stack.yml portainer
 }
 
 install_dry() {
@@ -100,8 +82,6 @@ require_cmds curl tar grep sed
 
 [[ "$INSTALL_LAZYDOCKER" == "true" ]] && install_lazydocker
 [[ "$INSTALL_DIVE" == "true" ]] && install_dive
-[[ "$INSTALL_PORTAINER" == "true" ]] && install_portainer
-[[ "$INSTALL_PORTAINER_SWARM" == "true" ]] && install_portainer_swarm
 [[ "$INSTALL_DRY" == "true" ]] && install_dry
 [[ "$INSTALL_TRIVY" == "true" ]] && install_trivy
 [[ "$INSTALL_HADOLINT" == "true" ]] && install_hadolint

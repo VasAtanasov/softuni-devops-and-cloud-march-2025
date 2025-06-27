@@ -9,7 +9,7 @@ fi
 
 : "${TIMEOUT:=360}"
 : "${INTERVAL:=10}"
-: "${DOCKER_COMPOSE_FILE:=docker-compose.yml}"
+: "${DOCKER_COMPOSE_FILE:=docker-compose.yaml}"
 : "${DOCKER_COMPOSE_ENV_FILE:=.env}"
 : "${STACK_NAME}"
 

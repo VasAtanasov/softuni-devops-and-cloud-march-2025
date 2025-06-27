@@ -4,8 +4,7 @@ require 'ipaddr'
 
 # ---------------- Settings ----------------
 SETTINGS = {
-  # BOX_NAME: 'shekeriev/debian-12.11',
-  BOX_NAME: 'debian-docker',
+  BOX_NAME: 'shekeriev/debian-12.11',
   MEMORY: 2048,
   CPUS: 1,
   SUBNET: '192.168.10.0/24',
@@ -39,35 +38,22 @@ hosts = host_entries('manager', SETTINGS[:MANAGERS], 0, ips_list) +
 # ---------------- Vagrant Config ----------------
 Vagrant.configure('2') do |config|
 
-  # config.vm.provision :shell, path: 'docker-setup.sh'
-
-  config.vm.provision :file, source: "#{ASSETS}/logo", destination: '/tmp/logo'
-
-  config.vm.provision :shell, inline: <<~EOS
-    echo "* Add hosts ..."
-    #{hosts.map { |entry| "echo '#{entry}' >> /etc/hosts" }.join("\n")}
-
-    echo "* Install Additional Packages ..."
-    echo "* Installing tools ..."
-    apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq jq yq tree git vim tmux
-
-    echo "* Disable login message..."
-    echo -n > /home/vagrant/.hushlogin
-
-    echo "* Setting greeting..."
-    GREETING_FILE=/etc/profile.d/greeting.sh
-    [ -f "$GREETING_FILE" ] || cp /tmp/logo "$GREETING_FILE"
-  EOS
-
   config.vm.provider :virtualbox do |vb|
     vb.customize ['modifyvm', :id, '--memory', SETTINGS[:MEMORY]]
     vb.customize ['modifyvm', :id, '--cpus', SETTINGS[:CPUS]]
     vb.customize ['modifyvm', :id, '--groups', '/swarm']
   end
 
-  config.vm.network :forwarded_port, guest: 9443, host: 9443, auto_correct: true
-  config.vm.network :forwarded_port, guest: 3306, host: 3306, auto_correct: true
+  config.vm.provision :file, source: "#{ASSETS}/logo", destination: '/tmp/logo'
+
+  config.vm.provision "Bootstrap", type: :shell do |shell|
+    shell.path = "bootstrap.sh"
+    shell.env = { "HOST_ENTRIES" => hosts.join('\n') }
+  end
+
+  config.vm.provision 'Install Docker', type: :shell do |shell|
+    shell.path = 'docker-setup.sh'
+  end
 
   # ---------------- Define Manager Nodes ----------------
   SETTINGS[:MANAGERS].times do |i|
@@ -88,13 +74,6 @@ Vagrant.configure('2') do |config|
         shell.inline = "docker swarm init --advertise-addr #{ip}"
       end if i == LEADER_INDEX
 
-      manager.vm.provision 'Add labels to manager node', type: :shell do |shell|
-        shell.inline = <<~SCRIPT
-          docker node update --label-add registry=true #{name}
-          docker node update --label-add role=manager #{name}
-        SCRIPT
-      end
-
       manager.vm.provision 'Extract worker token', type: :shell do |shell|
         puts "Saving worker token at #{SETTINGS[:SHARED_DIR]}/worker.token" if DEBUG
         shell.inline = "docker swarm join-token -q worker > #{SETTINGS[:SHARED_DIR]}/worker.token"
@@ -105,43 +84,6 @@ Vagrant.configure('2') do |config|
         shell.inline = "docker swarm join-token -q manager > #{SETTINGS[:SHARED_DIR]}/manager.token"
       end if i == LEADER_INDEX
 
-      manager.vm.provision 'Create local docker registry', type: :shell do |shell|
-        port = 5000 + i
-        puts "Create docker registry on #{name}:#{port}" if DEBUG
-        manager.vm.network :forwarded_port, guest: port, host: port
-        shell.inline = <<~SCRIPT
-          docker service create \
-            --detach=true \
-            --name registry \
-            --publish published=#{port},target=5000 \
-            --constraint 'node.role==manager' \
-            registry:2
-        SCRIPT
-      end if i == LEADER_INDEX
-
-      manager.vm.provision 'Visualizer', type: :shell do |shell|
-        port = 8080
-        puts "Running visualiser on port #{port}" if DEBUG
-        manager.vm.network :forwarded_port, guest: port, host: port
-        shell.inline = <<~SCRIPT
-          docker service create \
-            --detach=true \
-            --name=viz \
-            --publish=#{port}:#{port}/tcp \
-            --constraint=node.role==manager \
-            --mount=type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
-            dockersamples/visualizer
-        SCRIPT
-      end if i == LEADER_INDEX
-
-      manager.vm.provision 'Portainer for Docker Swarm', type: :shell do |shell|
-        puts "Running portainer stack" if DEBUG
-        shell.inline = <<~SCRIPT
-          curl -sSL https://downloads.portainer.io/ce-lts/portainer-agent-stack.yml -o portainer-agent-stack.yml
-          docker stack deploy -c portainer-agent-stack.yml portainer
-        SCRIPT
-      end if i == LEADER_INDEX
-
       manager.vm.provision 'Join manager to swarm', type: :shell do |shell|
         puts "Joining #{name} to docker swarm" if DEBUG
         shell.inline = <<~SCRIPT
@@ -149,23 +91,31 @@ Vagrant.configure('2') do |config|
         SCRIPT
       end unless i == LEADER_INDEX
 
+      manager.vm.synced_folder "registry_data", "/mnt/registry", create: true
+      manager.vm.provision 'Provision Swarm Leader', type: :shell do |shell|
+        puts "Provisioning Services on Swarm Leader - #{name}" if DEBUG
+        shell.path = 'provision-swarm.sh'
+        manager.vm.network :forwarded_port, guest: 5000, host: 5000, auto_correct: true
+        manager.vm.network :forwarded_port, guest: 8001, host: 8001, auto_correct: true
+        manager.vm.network :forwarded_port, guest: 9443, host: 9443, auto_correct: true
+      end if i == LEADER_INDEX
+
       manager.vm.provision 'Install docker tools', type: :shell do |shell|
         shell.path = 'docker-tools.sh'
         shell.env = {
           'INSTALL_LAZYDOCKER' => 'false',
-          'INSTALL_DIVE' => 'true',
-          'INSTALL_PORTAINER' => 'false',
-          'INSTALL_PORTAINER_SWARM' => "false",
+          'INSTALL_DIVE' => 'false',
           'INSTALL_DRY' => 'true',
-          'INSTALL_TRIVY' => 'true',
-          'INSTALL_HADOLINT' => 'true',
-          'INSTALL_PUSHRM' => 'true',
+          'INSTALL_TRIVY' => 'false',
+          'INSTALL_HADOLINT' => 'false',
+          'INSTALL_PUSHRM' => 'false',
         }
       end
 
-      manager.vm.provision 'Wait for swarm and deploy', type: :shell, privileged: false do |shell|
-        port = 8081
-        manager.vm.network :forwarded_port, guest: port, host: port
+      manager.vm.provision 'Wait for swarm and deploy', type: :shell, privileged: true do |shell|
+        manager.vm.network :forwarded_port, guest: 8081, host: 8081, auto_correct: true
+        manager.vm.network :forwarded_port, guest: 3306, host: 3306, auto_correct: true
+
         shell.env = {
           'EXPECTED_NODES' => TOTAL.to_s,
           'DOCKER_COMPOSE_FILE' => "#{SETTINGS[:SHARED_DIR]}/bgapp/docker-compose.yaml",
@@ -181,17 +131,11 @@ Vagrant.configure('2') do |config|
       end if i == LEADER_INDEX
 
       manager.trigger.before :destroy do |trigger|
-        trigger.warn = 'Cleaning up'
+        trigger.name = "Clean host files"
         trigger.run = {
           inline: <<~POWERSHELL,
-            if (Test-Path "manager.token") {
-              Remove-Item "manager.token" -Force
-            }
-            if (Test-Path "worker.token") {
-              Remove-Item "worker.token" -Force
-            }
-            if (Test-Path "wait.log") {
-              Remove-Item "wait.log" -Force
+            @("manager.token", "worker.token", "registry_data") | ForEach-Object {
+              if (Test-Path $_) { Remove-Item $_ -Recurse -Force }
             }
           POWERSHELL
         }

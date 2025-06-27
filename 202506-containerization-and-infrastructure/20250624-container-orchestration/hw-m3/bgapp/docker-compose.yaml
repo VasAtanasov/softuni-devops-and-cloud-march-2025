@@ -3,7 +3,7 @@ services:
   web:
     deploy:
       mode: replicated
-      replicas: 5
+      replicas: 3
     image: 127.0.0.1:5000/web
     build:
       context: web
@@ -18,9 +18,6 @@ services:
       - db
 
   db:
-    deploy:
-      mode: replicated
-      replicas: 3
     image: 127.0.0.1:5000/db
     build:
       context: db

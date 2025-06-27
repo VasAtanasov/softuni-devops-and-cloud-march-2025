@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if command -v docker &>/dev/null; then
+  echo "* Docker is already installed. Skipping installation."
+  exit 0
+fi
+
 echo "* Add any prerequisites ..."
 apt-get update
 apt-get install -y ca-certificates curl
