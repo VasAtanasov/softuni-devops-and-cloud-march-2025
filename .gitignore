@@ -133,3 +133,6 @@ Backup of *.doc*
 
 # Visio autosave temporary files
 *.~vsd*
+
+registry_data
+*.token

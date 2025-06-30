@@ -80,9 +80,26 @@ install_pushrm() {
 
 require_cmds curl tar grep sed
 
-[[ "$INSTALL_LAZYDOCKER" == "true" ]] && install_lazydocker
-[[ "$INSTALL_DIVE" == "true" ]] && install_dive
-[[ "$INSTALL_DRY" == "true" ]] && install_dry
-[[ "$INSTALL_TRIVY" == "true" ]] && install_trivy
-[[ "$INSTALL_HADOLINT" == "true" ]] && install_hadolint
-[[ "$INSTALL_PUSHRM" == "true" ]] && install_pushrm
+if [[ "${INSTALL_LAZYDOCKER}" == "true" ]]; then
+  install_lazydocker
+fi
+
+if [[ "${INSTALL_DIVE}" == "true" ]]; then
+  install_dive
+fi
+
+if [[ "${INSTALL_DRY}" == "true" ]]; then
+  install_dry
+fi
+
+if [[ "${INSTALL_TRIVY}" == "true" ]]; then
+  install_trivy
+fi
+
+if [[ "${INSTALL_HADOLINT}" == "true" ]]; then
+  install_hadolint
+fi
+
+if [[ "${INSTALL_PUSHRM}" == "true" ]]; then
+  install_pushrm
+fi

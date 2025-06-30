@@ -7,7 +7,7 @@ SETTINGS = {
   BOX_NAME: 'shekeriev/debian-12.11',
   MEMORY: 2048,
   CPUS: 1,
-  SUBNET: '192.168.10.0/24',
+  SUBNET: '192.168.99.0/24',
   MANAGERS: 1,
   WORKERS: 2,
   SHARED_DIR: '/vagrant'
@@ -15,9 +15,8 @@ SETTINGS = {
 
 ASSETS = File.join(File.dirname(__FILE__), 'assets')
 TOTAL = SETTINGS[:MANAGERS] + SETTINGS[:WORKERS]
-IP_START = 201
+IP_START = 101
 DEBUG = ENV['DEBUG'] == 'true'
-LEADER_INDEX = 0
 
 puts '[INFO] DEBUG MODE ENABLED' if DEBUG
 
@@ -56,6 +55,7 @@ Vagrant.configure('2') do |config|
   end
 
   # ---------------- Define Manager Nodes ----------------
+  leader_index = 0 # Leader will always be the first.
   SETTINGS[:MANAGERS].times do |i|
     name = "manager#{i + 1}"
     ip = ips_list[i]
@@ -72,24 +72,24 @@ Vagrant.configure('2') do |config|
 
       manager.vm.provision 'Init docker swarm', type: :shell do |shell|
         shell.inline = "docker swarm init --advertise-addr #{ip}"
-      end if i == LEADER_INDEX
+      end if i == leader_index
 
       manager.vm.provision 'Extract worker token', type: :shell do |shell|
         puts "Saving worker token at #{SETTINGS[:SHARED_DIR]}/worker.token" if DEBUG
         shell.inline = "docker swarm join-token -q worker > #{SETTINGS[:SHARED_DIR]}/worker.token"
-      end if i == LEADER_INDEX
+      end if i == leader_index
 
       manager.vm.provision 'Extract manager token', type: "shell" do |shell|
         puts "Saving manager token at #{SETTINGS[:SHARED_DIR]}/manager.token" if DEBUG
         shell.inline = "docker swarm join-token -q manager > #{SETTINGS[:SHARED_DIR]}/manager.token"
-      end if i == LEADER_INDEX
+      end if i == leader_index
 
       manager.vm.provision 'Join manager to swarm', type: :shell do |shell|
         puts "Joining #{name} to docker swarm" if DEBUG
         shell.inline = <<~SCRIPT
-          docker swarm join --token $(cat #{SETTINGS[:SHARED_DIR]}/manager.token) --advertise-addr #{ip} #{ips_list[LEADER_INDEX]}:2377
+          docker swarm join --token $(cat #{SETTINGS[:SHARED_DIR]}/manager.token) --advertise-addr #{ip} #{ips_list[leader_index]}:2377
         SCRIPT
-      end unless i == LEADER_INDEX
+      end unless i == leader_index
 
       manager.vm.synced_folder "registry_data", "/mnt/registry", create: true
       manager.vm.provision 'Provision Swarm Leader', type: :shell do |shell|
@@ -98,7 +98,7 @@ Vagrant.configure('2') do |config|
         manager.vm.network :forwarded_port, guest: 5000, host: 5000, auto_correct: true
         manager.vm.network :forwarded_port, guest: 8001, host: 8001, auto_correct: true
         manager.vm.network :forwarded_port, guest: 9443, host: 9443, auto_correct: true
-      end if i == LEADER_INDEX
+      end if i == leader_index
 
       manager.vm.provision 'Install docker tools', type: :shell do |shell|
         shell.path = 'docker-tools.sh'
@@ -128,7 +128,7 @@ Vagrant.configure('2') do |config|
 
           tmux new-session -d -s deploy_stack 'bash #{SETTINGS[:SHARED_DIR]}/deploy-stack.sh; bash'
         SCRIPT
-      end if i == LEADER_INDEX
+      end if i == leader_index
 
       manager.trigger.before :destroy do |trigger|
         trigger.name = "Clean host files"
@@ -139,7 +139,7 @@ Vagrant.configure('2') do |config|
             }
           POWERSHELL
         }
-      end if i == LEADER_INDEX
+      end if i == leader_index
 
     end
   end
@@ -163,7 +163,7 @@ Vagrant.configure('2') do |config|
       node.vm.provision 'Join worker to swarm', type: :shell do |shell|
         puts "Joining #{name} to docker swarm" if DEBUG
         shell.inline = <<~SCRIPT
-          docker swarm join --token $(cat #{SETTINGS[:SHARED_DIR]}/worker.token) --advertise-addr #{ip} #{ips_list[LEADER_INDEX]}:2377
+          docker swarm join --token $(cat #{SETTINGS[:SHARED_DIR]}/worker.token) --advertise-addr #{ip} #{ips_list[leader_index]}:2377
         SCRIPT
       end
 
