@@ -4,7 +4,8 @@ require 'ipaddr'
 
 # ---------------- Settings ----------------
 SETTINGS = {
-  BOX_NAME: 'shekeriev/debian-12.11',
+  BOX_NAME: 'debian12-docker',
+  # BOX_NAME: 'shekeriev/debian-12.11',
   MEMORY: 2048,
   CPUS: 1,
   SUBNET: '192.168.99.0/24',

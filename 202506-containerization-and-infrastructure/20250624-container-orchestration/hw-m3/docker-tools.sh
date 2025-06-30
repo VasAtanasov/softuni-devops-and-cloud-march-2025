@@ -9,7 +9,6 @@ set -euo pipefail
 : "${INSTALL_PUSHRM:=false}"
 
 BIN_DIR="/usr/local/bin"
-LOCAL_BIN="/home/vagrant/.local/bin"
 
 log() {
   echo "* $*"
@@ -25,17 +24,25 @@ require_cmds() {
 }
 
 install_lazydocker() {
+  if command -v lazydocker --version &>/dev/null; then
+    log "LazyDocker is already installed"
+    return
+  fi
   log "Installing LazyDocker"
   local version
   version=$(curl -sL "https://api.github.com/repos/jesseduffield/lazydocker/releases/latest" |
     grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
   curl -sSLo lazydocker.tar.gz "https://github.com/jesseduffield/lazydocker/releases/download/v${version}/lazydocker_${version}_Linux_x86_64.tar.gz"
   tar xzvf lazydocker.tar.gz lazydocker
-  install -Dm 755 lazydocker -t "$LOCAL_BIN"
+  install -Dm 755 lazydocker -t "$BIN_DIR"
   rm lazydocker lazydocker.tar.gz
 }
 
 install_dive() {
+  if command -v dive &>/dev/null; then
+    log "Dive is already installed"
+    return
+  fi
   log "Installing Dive"
   local version
   version=$(curl -sL "https://api.github.com/repos/wagoodman/dive/releases/latest" |
@@ -46,18 +53,30 @@ install_dive() {
 }
 
 install_dry() {
+  if command -v dry &>/dev/null; then
+    log "Dry is already installed"
+    return
+  fi
   log "Installing Dry"
   curl -sSfL https://moncho.github.io/dry/dryup.sh | sh
   chmod 755 "$BIN_DIR/dry"
 }
 
 install_trivy() {
+  if command -v trivy &>/dev/null; then
+    log "Trivy is already installed"
+    return
+  fi
   log "Installing Trivy"
   curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh |
     sh -s -- -b "$BIN_DIR" latest
 }
 
 install_hadolint() {
+  if command -v hadolint &>/dev/null; then
+    log "Hadolint is already installed"
+    return
+  fi
   log "Installing Hadolint"
   local version
   version=$(curl -sL "https://api.github.com/repos/hadolint/hadolint/releases/latest" |
@@ -68,6 +87,10 @@ install_hadolint() {
 }
 
 install_pushrm() {
+  if [[ -x /usr/local/lib/docker/cli-plugins/docker-pushrm ]]; then
+    log "Pushrm is already installed"
+    return
+  fi
   log "Installing Docker Push Readme"
   local version
   version=$(curl -sL "https://api.github.com/repos/christian-korneck/docker-pushrm/releases/latest" |
