@@ -119,7 +119,7 @@ Vagrant.configure('2') do |config|
         shell.env = {
           'EXPECTED_NODES' => TOTAL.to_s,
           'DOCKER_COMPOSE_FILE' => "#{SETTINGS[:SHARED_DIR]}/bgapp/docker-compose.yaml",
-          'DOCKER_COMPOSE_ENV_FILE' => "#{SETTINGS[:SHARED_DIR]}/bgapp/.env",
+          'DOCKER_COMPOSE_ENV_FILE' => "#{SETTINGS[:SHARED_DIR]}/bgapp/bgapp.env",
           'STACK_NAME' => "bgapp"
         }
         shell.inline = <<~SCRIPT
