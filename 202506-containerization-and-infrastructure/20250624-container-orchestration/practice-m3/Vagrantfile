@@ -1,0 +1,127 @@
+require 'ipaddr'
+
+SETTINGS = {
+  box: 'debian12-docker',
+  # box: 'shekeriev/debian-12.11',
+  memory: 2048,
+  cpus: 1,
+  shared_dir: '/vagrant',
+  nodes: [
+    { name: 'manager1', role: :manager, subnet: '192.168.99.0/24', ip_last: 101 },
+    { name: 'manager2', role: :manager, subnet: '192.168.99.0/24', ip_last: 102 },
+    { name: 'manager3', role: :manager, subnet: '192.168.100.0/24', ip_last: 101 },
+    { name: 'worker1', role: :worker, subnet: '192.168.100.0/24', ip_last: 102 },
+    { name: 'worker2', role: :worker, subnet: '192.168.101.0/24', ip_last: 101 }
+  ]
+}
+
+VAGRANT_DIR = File.join(File.dirname(__FILE__), 'vagrant')
+SCRIPTS_DIR = File.join(File.dirname(__FILE__), 'scripts')
+DEBUG = ENV['DEBUG'] == 'true'
+
+puts '[INFO] DEBUG MODE ENABLED' if DEBUG
+
+# ---------------- Helpers ----------------
+def ip_for(subnet, last)
+  IPAddr.new(subnet).to_range.first.to_s.split('.').tap { |ip| ip[3] = last.to_s }.join('.')
+end
+
+def generate_hosts(nodes)
+  nodes.map do |n|
+    "#{ip_for(n[:subnet], n[:ip_last])} #{n[:name]}.do1.hw #{n[:name]}"
+  end
+end
+
+HOSTS = generate_hosts(SETTINGS[:nodes])
+LEADER = SETTINGS[:nodes].find { |n| n[:role] == :manager }
+
+# ---------------- Vagrant Config ----------------
+Vagrant.configure('2') do |config|
+  config.vm.provider :virtualbox do |vb|
+    vb.customize ['modifyvm', :id, '--memory', SETTINGS[:memory]]
+    vb.customize ['modifyvm', :id, '--cpus', SETTINGS[:cpus]]
+    vb.customize ['modifyvm', :id, '--groups', '/swarm']
+  end
+
+  config.ssh.insert_key = false
+
+  config.vm.provision :file, source: "#{SCRIPTS_DIR}/logo.sh", destination: '/tmp/logo'
+
+  config.vm.synced_folder "vagrant", "/vagrant"
+
+  config.vm.provision 'bootstrap', type: :shell do |shell|
+    shell.path = "#{SCRIPTS_DIR}/bootstrap.sh"
+    shell.env = { 'HOST_ENTRIES' => HOSTS.join('\n') }
+  end
+
+  SETTINGS[:nodes].each do |node|
+    ip = ip_for(node[:subnet], node[:ip_last])
+    hostname = "#{node[:name]}.local"
+
+    config.vm.define node[:name] do |vm|
+      vm.vm.box = SETTINGS[:box]
+      vm.vm.hostname = hostname
+      vm.vm.network :private_network, ip: ip
+      vm.vm.provider :virtualbox do |vb|
+        vb.name = node[:name]
+      end
+
+      vm.vm.provision 'init-swarm', type: :shell do |sh|
+        puts "Creating swarm with leader #{node[:name]}"
+        sh.inline = "docker swarm init --advertise-addr #{ip}"
+      end if node == LEADER
+
+      vm.vm.provision 'extract-tokens', type: :shell do |sh|
+        sh.inline = <<~SCRIPT
+          docker swarm join-token -q worker > #{SETTINGS[:shared_dir]}/worker.token
+          docker swarm join-token -q manager > #{SETTINGS[:shared_dir]}/manager.token
+        SCRIPT
+      end if node == LEADER
+
+      vm.vm.provision "join-#{node[:role]}", type: :shell do |sh|
+        puts "Now joining #{node[:name]}"
+        token_file = "#{SETTINGS[:shared_dir]}/#{node[:role]}.token"
+        leader_ip = ip_for(LEADER[:subnet], LEADER[:ip_last])
+        sh.inline = <<~SCRIPT
+          docker swarm join --token $(cat #{token_file}) --advertise-addr #{ip} #{leader_ip}:2377
+        SCRIPT
+      end unless node == LEADER
+
+      if node[:role] == :manager
+        vm.vm.synced_folder "registry_data", "/mnt/registry", create: true
+      end
+
+      vm.vm.provision 'Provision Swarm Leader', type: :shell do |shell|
+        puts "Provisioning Services on Swarm Leader - #{name}" if DEBUG
+        shell.path = "#{SCRIPTS_DIR}/provision-swarm.sh"
+        vm.vm.network :forwarded_port, guest: 5000, host: 5000, auto_correct: true
+        vm.vm.network :forwarded_port, guest: 8001, host: 8001, auto_correct: true
+        vm.vm.network :forwarded_port, guest: 9443, host: 9443, auto_correct: true
+      end if node == LEADER
+
+      vm.vm.provision 'Install docker tools', type: :shell do |shell|
+        shell.path = "#{SCRIPTS_DIR}/docker-tools.sh"
+        shell.env = {
+          'INSTALL_LAZYDOCKER' => 'false',
+          'INSTALL_DIVE' => 'false',
+          'INSTALL_DRY' => 'true',
+          'INSTALL_TRIVY' => 'false',
+          'INSTALL_HADOLINT' => 'false',
+          'INSTALL_PUSHRM' => 'false',
+        }
+      end if node[:role] == :manager
+
+      vm.trigger.before :destroy do |trigger|
+        trigger.name = "Clean host files"
+        trigger.run = {
+          inline: <<~POWERSHELL,
+            @("vagrant/manager.token", "vagrant/worker.token", "registry_data") | ForEach-Object {
+              if (Test-Path $_) { Remove-Item $_ -Recurse -Force }
+            }
+          POWERSHELL
+        }
+      end if node == LEADER
+
+    end
+  end
+end

@@ -1,0 +1,42 @@
+#!/bin/bash
+echo "                                                                                                            "
+echo "  _____     ____     _____   _  __  ______   _____       _____  __          __             _____    __  __  "
+echo " |  __ \   / __ \   / ____| | |/ / |  ____| |  __ \     / ____| \ \        / /     /\     |  __ \  |  \/  | "
+echo " | |  | | | |  | | | |      | ' /  | |__    | |__) |   | (___    \ \  /\  / /     /  \    | |__) | | \  / | "
+echo " | |  | | | |  | | | |      |  <   |  __|   |  _  /     \___ \    \ \/  \/ /     / /\ \   |  _  /  | |\/| | "
+echo " | |__| | | |__| | | |____  | . \  | |____  | | \ \     ____) |    \  /\  /     / ____ \  | | \ \  | |  | | "
+echo " |_____/   \____/   \_____| |_|\_\ |______| |_|  \_\   |_____/      \/  \/     /_/    \_\ |_|  \_\ |_|  |_| "
+echo "                                                                                                            "
+echo "                                                                                                            "
+echo "                                                              _____                    ____                 "
+echo "                                                             |  __ \                  / __ \                "
+echo "                                                             | |  | |   ___  __   __ | |  | |  _ __    ___  "
+echo "                                                             | |  | |  / _ \ \ \ / / | |  | | | '_ \  / __| "
+echo "                                                             | |__| | |  __/  \ V /  | |__| | | |_) | \__ \ "
+echo "                                                             |_____/   \___|   \_/    \____/  | .__/  |___/ "
+echo "                                                                                              | |           "
+echo "                                                                                              |_|           "
+echo "                                                                                                      @2025 "
+echo "                                                                                                            "
+
+command_exists() {
+  command -v "$@" >/dev/null 2>&1
+}
+
+if command_exists docker; then
+    if [ "$(docker info --format {{.Swarm.LocalNodeState}})" = "active" ]; then
+        if [ "$(docker info --format "{{.Swarm.ControlAvailable}}")" = "true" ]; then
+            is_leader=$(docker node inspect self --format "{{ .ManagerStatus.Leader }}")
+            sufix=""
+            if $is_leader; then
+                sufix="(Leader)"
+            fi
+            echo "Current node is a Manager${sufix}."
+        else
+            echo "Current node is a Worker."
+        fi
+    fi
+fi
+
+echo "                                                                                                            "
+echo "                                                                                                            "
