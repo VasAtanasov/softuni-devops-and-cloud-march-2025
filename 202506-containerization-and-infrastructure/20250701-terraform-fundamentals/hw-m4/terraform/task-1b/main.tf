@@ -15,25 +15,25 @@ provider "docker" {}
 # we need to use docker_image in combination with docker_registry_image.
 
 # DB Image
-data "docker_registry_image" "mybgapp_db" {
+resource "docker_image" "bgapp_db" {
   name = "${var.mybgapp_db_image_repo}:${var.mybgapp_db_image_tag}"
-}
-
-resource "docker_image" "mybgapp_db" {
-  name = data.docker_registry_image.mybgapp_db.name
-  pull_triggers = [data.docker_registry_image.mybgapp_db.sha256_digest]
   keep_locally = true
+
+  build {
+    context    = "${path.cwd}/bgapp"
+    dockerfile = "${path.cwd}/bgapp/Dockerfile.db"
+  }
 }
 
 # WEB Image
-data "docker_registry_image" "mybgapp_web" {
+resource "docker_image" "bgapp_web" {
   name = "${var.mybgapp_web_image_repo}:${var.mybgapp_web_image_tag}"
-}
-
-resource "docker_image" "mybgapp_web" {
-  name = data.docker_registry_image.mybgapp_web.name
-  pull_triggers = [data.docker_registry_image.mybgapp_web.sha256_digest]
   keep_locally = true
+
+  build {
+    context    = "${path.cwd}/bgapp"
+    dockerfile = "${path.cwd}/bgapp/Dockerfile.web"
+  }
 }
 
 # Network
@@ -44,7 +44,7 @@ resource "docker_network" "bgapp_net" {
 # DB Container
 resource "docker_container" "db" {
   name  = "db"
-  image = docker_image.mybgapp_db.name
+  image = docker_image.bgapp_db.name
 
   networks_advanced {
     name = docker_network.bgapp_net.name
@@ -58,7 +58,7 @@ resource "docker_container" "db" {
 # Web Container
 resource "docker_container" "web" {
   name  = "web"
-  image = docker_image.mybgapp_web.name
+  image = docker_image.bgapp_web.name
 
   networks_advanced {
     name = docker_network.bgapp_net.name
