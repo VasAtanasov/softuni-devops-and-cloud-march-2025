@@ -1,8 +1,7 @@
 require 'ipaddr'
 
 SETTINGS = {
-  box: 'debian12-docker',
-  # box: 'shekeriev/debian-12.11',
+  box: 'shekeriev/debian-12.11',
   memory: 2048,
   cpus: 1,
   shared_dir: '/vagrant',

@@ -1,47 +1,72 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-Vagrant.configure("2") do |config|
+TERRAFORM_DIR = File.join(File.dirname(__FILE__), 'terraform')
+SCRIPTS_DIR = File.join(File.dirname(__FILE__), 'scripts')
+
+Vagrant.configure('2') do |config|
 
   config.ssh.insert_key = false
+  config.vm.synced_folder '.', '/vagrant', disabled: true
 
-  config.vm.define "docker" do |docker|
-    docker.vm.box = "shekeriev/debian-12.11"
-    docker.vm.hostname = "docker"
-    docker.vm.network "private_network", ip: "192.168.99.100"
-    docker.vm.network "forwarded_port", guest: 80, host: 8000, auto_correct: true
-    docker.vm.network "forwarded_port", guest: 8080, host: 8080, auto_correct: true
-    docker.vm.provider :virtualbox do |vb|
-      vb.customize ["modifyvm", :id, "--memory", "2048"]
+  config.vm.define :terraform do |terraform|
+    terraform.vm.box = 'shekeriev/debian-12.11'
+
+    terraform.vm.hostname = 'docker'
+
+    terraform.vm.synced_folder "#{TERRAFORM_DIR}", '/vagrant/terraform'
+
+    terraform.vm.network :private_network, ip: '192.168.99.100'
+    terraform.vm.network :forwarded_port, guest: 80, host: 8000, auto_correct: true
+    terraform.vm.network :forwarded_port, guest: 8080, host: 8080, auto_correct: true
+
+    terraform.vm.provider :virtualbox do |vb|
+      vb.name = 'terraform'
+      vb.customize ['modifyvm', :id, '--memory', 2048]
+      vb.customize ['modifyvm', :id, '--cpus', 1]
+      vb.customize ['modifyvm', :id, '--groups', '/m4']
     end
-    docker.vm.provision "shell", inline: <<~EOS
-      export DEBIAN_FRONTEND=noninteractive
 
-      echo "* Add hosts ..."
-      echo "192.168.99.100 docker" >> /etc/hosts
+    terraform.vm.provision 'boostrap', type: :shell do |shell|
+      shell.path = "#{SCRIPTS_DIR}/bootstrap.sh"
+    end
 
-      echo "* Add any prerequisites ..."
-      apt-get update
-      apt-get install -y ca-certificates curl gnupg lsb-release
+    terraform.vm.provision 'install-docker', type: :shell do |shell|
+      shell.path = "#{SCRIPTS_DIR}/docker-setup.sh"
+    end
 
-      echo "* Add Docker repository and key ..."
-      curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    terraform.vm.provision 'install-terraform', type: :shell do |shell|
+      shell.path = "#{SCRIPTS_DIR}/terraform-setup.sh"
+    end
 
-      echo "* Install Docker ..."
-      apt-get update
-      apt-get install -y docker-ce docker-ce-cli containerd.io
+    # terraform.trigger.before :up do |trigger|
+    #   trigger.name = "Clean bgapp folders"
+    #   trigger.run = {
+    #     inline: <<~POWERSHELL
+    #       Get-ChildItem -Directory -Filter "terraform/task-*" | ForEach-Object {
+    #         $d = Join-Path $_ "bgapp"
+    #         if (Test-Path $d) { Remove-Item $d -Recurse -Force }
+    #       }
+    #     POWERSHELL
+    #   }
+    # end
 
-      echo "* Add vagrant user to docker group ..."
-      usermod -aG docker vagrant
+    terraform.trigger.before :up do |trigger|
+      trigger.name = "Clean bgapp and Terraform files"
+      trigger.run = {
+        inline: <<~POWERSHELL
+          Get-ChildItem -Directory -Path terraform/task-* | ForEach-Object {
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue `
+              (Join-Path $_ "bgapp"), `
+              (Join-Path $_ ".terraform"), `
+              (Join-Path $_ "terraform.tfstate"), `
+              (Join-Path $_ "terraform.tfstate.backup"), `
+              (Join-Path $_ "terraform.lock.hcl")
+          }
+        POWERSHELL
+      }
+    end
 
-      echo "* Adjust Docker configuration ..."
-      sed -i 's@-H fd://@-H fd:// -H tcp://0.0.0.0@g' /lib/systemd/system/docker.service
-
-      echo "* Restart Docker ..."
-      systemctl daemon-reload
-      systemctl restart docker
-    EOS
   end
 
 end
