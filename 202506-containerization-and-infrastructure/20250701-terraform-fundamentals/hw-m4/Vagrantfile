@@ -39,19 +39,7 @@ Vagrant.configure('2') do |config|
       shell.path = "#{SCRIPTS_DIR}/terraform-setup.sh"
     end
 
-    # terraform.trigger.before :up do |trigger|
-    #   trigger.name = "Clean bgapp folders"
-    #   trigger.run = {
-    #     inline: <<~POWERSHELL
-    #       Get-ChildItem -Directory -Filter "terraform/task-*" | ForEach-Object {
-    #         $d = Join-Path $_ "bgapp"
-    #         if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-    #       }
-    #     POWERSHELL
-    #   }
-    # end
-
-    terraform.trigger.before :up do |trigger|
+    terraform.trigger.before :destroy do |trigger|
       trigger.name = "Clean bgapp and Terraform files"
       trigger.run = {
         inline: <<~POWERSHELL
@@ -61,7 +49,7 @@ Vagrant.configure('2') do |config|
               (Join-Path $_ ".terraform"), `
               (Join-Path $_ "terraform.tfstate"), `
               (Join-Path $_ "terraform.tfstate.backup"), `
-              (Join-Path $_ "terraform.lock.hcl")
+              (Join-Path $_ ".terraform.lock.hcl")
           }
         POWERSHELL
       }
