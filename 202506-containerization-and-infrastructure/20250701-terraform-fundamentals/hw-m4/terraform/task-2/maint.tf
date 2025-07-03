@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "6.0.0"
+      version = "6.2.0"
     }
   }
 }
@@ -22,6 +22,7 @@ resource "aws_instance" "vm1" {
 output "public_ip" {
   value = aws_instance.vm1.public_ip
 }
+
 output "public_dns" {
   value = aws_instance.vm1.public_dns
 }
