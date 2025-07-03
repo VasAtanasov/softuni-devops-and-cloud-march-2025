@@ -9,20 +9,38 @@ terraform {
   }
 }
 
-resource "aws_instance" "vm1" {
-  ami           = "ami-0229b8f55e5178b65"
-  instance_type = "t2.micro"
-  key_name      = "terraform-key"
+provider "aws" {
+  region = var.region
+}
+
+resource "aws_instance" "do1-web" {
+  ami           = var.v-ami-image
+  instance_type = var.v-instance-type
+  key_name      = var.v-instance-key
 
   tags = {
-    Name = "terraform-example"
+    Name = "bgapp-web"
   }
+
+  network_interface {
+    network_interface_id = aws_network_interface.do1-web-net.id
+    device_index         = 0
+  }
+
 }
 
-output "public_ip" {
-  value = aws_instance.vm1.public_ip
-}
+resource "aws_instance" "do1-db" {
+  ami           = var.v-ami-image
+  instance_type = var.v-instance-type
+  key_name      = var.v-instance-key
 
-output "public_dns" {
-  value = aws_instance.vm1.public_dns
+  tags = {
+    Name = "bgapp-db"
+  }
+
+  network_interface {
+    network_interface_id = aws_network_interface.do1-db-net.id
+    device_index         = 0
+  }
+
 }
