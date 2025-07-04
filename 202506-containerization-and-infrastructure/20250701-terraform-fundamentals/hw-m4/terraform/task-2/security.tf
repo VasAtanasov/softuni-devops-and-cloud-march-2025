@@ -28,7 +28,7 @@ resource "aws_security_group" "do1-pub-sg" {
     from_port   = 8
     to_port     = -1
     protocol    = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["10.10.10.0/24"]
   }
 
   egress {
