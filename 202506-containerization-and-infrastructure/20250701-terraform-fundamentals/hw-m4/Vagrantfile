@@ -12,8 +12,9 @@ Vagrant.configure('2') do |config|
 
   config.vm.define :terraform do |terraform|
     terraform.vm.box = 'shekeriev/debian-12.11'
+    terraform.vm.box_version = '0.1'
 
-    terraform.vm.hostname = 'docker'
+    terraform.vm.hostname = 'terraform'
 
     terraform.vm.synced_folder "#{TERRAFORM_DIR}", '/vagrant/terraform'
     terraform.vm.synced_folder "#{ASSETS_DIR}", '/vagrant/assets'
@@ -25,13 +26,20 @@ Vagrant.configure('2') do |config|
     terraform.vm.provider :virtualbox do |vb|
       vb.name = 'terraform'
       vb.customize ['modifyvm', :id, '--memory', 2048]
-      vb.customize ['modifyvm', :id, '--cpus', 1]
+      vb.customize ['modifyvm', :id, '--cpus', 2]
       vb.customize ['modifyvm', :id, '--groups', '/m4']
+
+      vb.customize ['modifyvm', :id, '--ioapic', 'on']
+      vb.customize ['modifyvm', :id, '--pae', 'on']
+      vb.customize ['modifyvm', :id, '--cpuexecutioncap', '100']
+      vb.customize ['modifyvm', :id, '--natdnshostresolver1', 'on']
+      vb.customize ['modifyvm', :id, '--natdnsproxy1', 'on']
     end
 
     terraform.vm.provision :file, source: "#{ASSETS_DIR}/.tmux.conf", destination: '/home/vagrant/.tmux.conf'
-    terraform.vm.provision 'boostrap', type: :shell do |shell|
+    terraform.vm.provision 'bootstrap', type: :shell do |shell|
       shell.path = "#{SCRIPTS_DIR}/bootstrap.sh"
+      shell.args = '-e'
     end
 
     terraform.vm.provision 'install-aws-cli', type: :shell, privileged: false do |shell|
@@ -42,14 +50,17 @@ Vagrant.configure('2') do |config|
         'AWS_OUTPUT_FORMAT' => "#{ENV.fetch('AWS_OUTPUT_FORMAT', 'json')}"
       }
       shell.path = "#{SCRIPTS_DIR}/aws-cli-setup.sh"
+      shell.args = '-e'
     end
 
     terraform.vm.provision 'install-docker', type: :shell do |shell|
       shell.path = "#{SCRIPTS_DIR}/docker-setup.sh"
+      shell.args = '-e'
     end
 
     terraform.vm.provision 'install-terraform', type: :shell do |shell|
       shell.path = "#{SCRIPTS_DIR}/terraform-setup.sh"
+      shell.args = '-e'
     end
 
     terraform.trigger.before :destroy do |trigger|
@@ -67,7 +78,5 @@ Vagrant.configure('2') do |config|
         POWERSHELL
       }
     end
-
   end
-
 end
